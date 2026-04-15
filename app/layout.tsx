@@ -16,7 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const isInternal = pathname?.startsWith('/admin') || pathname?.startsWith('/worker');
 
   return (
-    <html lang="en" className={geist.variable}>
+    <html lang="en" className={geist.variable} data-scroll-behavior="smooth">
       <body className="min-h-screen flex flex-col antialiased bg-[#f8fafc]">
         {!isInternal && <TopBar />}
         {!isInternal && <Header />}

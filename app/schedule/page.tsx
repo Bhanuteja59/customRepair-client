@@ -32,6 +32,8 @@ export default function SchedulePage() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
   const [bookingRef, setBookingRef] = useState('');
+  const [availableSlots, setAvailableSlots] = useState<Record<string, {id: string, time: string}[]>>({});
+  const [loadingSlots, setLoadingSlots] = useState(false);
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -75,20 +77,34 @@ export default function SchedulePage() {
     }
   }, [searchParams]);
 
-  const handleSubmit = async () => {
-    const token = localStorage.getItem('customer_token');
-    
-    if (!token) {
-       // Save state and redirect to login
-       localStorage.setItem('pending_booking', JSON.stringify({
-          services: selectedServices,
-          form
-       }));
-       router.push('/login');
-       return;
+  const fetchAvailableSlots = async (service: string) => {
+    setLoadingSlots(true);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+      const res = await fetch(`${apiBase}/api/public/available-slots?service=${encodeURIComponent(service)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableSlots(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch slots:", err);
+    } finally {
+      setLoadingSlots(false);
     }
+  };
 
-    submitFinal(selectedServices, form);
+  useEffect(() => {
+    if (selectedServices.length > 0) {
+      fetchAvailableSlots(selectedServices.join(', '));
+    }
+  }, [selectedServices]);
+
+  const handleSubmit = async () => {
+    // Find the slot object to get the ID
+    const daySlots = availableSlots[form.date] || [];
+    const selectedSlot = daySlots.find(s => s.time === form.time);
+    
+    submitFinal(selectedServices, { ...form, slot_id: selectedSlot?.id });
   };
 
   const submitFinal = async (services: string[], formData: any) => {
@@ -97,7 +113,7 @@ export default function SchedulePage() {
     const token = localStorage.getItem('customer_token');
     
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/schedule`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'}/api/schedule`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -116,8 +132,10 @@ export default function SchedulePage() {
       setBookingRef(data.customer_id || '');
       setDone(true);
       
-      // Auto-redirect to dashboard after 3 seconds
-      setTimeout(() => router.push('/dashboard'), 3000);
+      // Auto-redirect to dashboard after 3 seconds only if logged in
+      if (token) {
+        setTimeout(() => router.push('/dashboard'), 3000);
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
@@ -364,21 +382,56 @@ export default function SchedulePage() {
 
                           <div className="space-y-4">
                             <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Arrival Window *</label>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              {TIME_WINDOWS.map((t) => (
-                                <button
-                                  key={t}
-                                  onClick={() => set('time', t)}
-                                  className={`
-                                    py-4 px-6 rounded-2xl border-2 font-black text-sm transition-all text-left flex items-center justify-between group
-                                    ${form.time === t ? 'border-red-500 bg-red-50/50 text-[#001d4a]' : 'border-gray-100 text-gray-400 hover:border-blue-200'}
-                                  `}
-                                >
-                                  <span>🕐 {t}</span>
-                                  {form.time === t && <span className="w-2 h-2 rounded-full bg-red-500" />}
-                                </button>
-                              ))}
-                            </div>
+                            
+                            {loadingSlots ? (
+                              <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-2xl animate-pulse">
+                                <div className="w-5 h-5 rounded-full bg-gray-200" />
+                                <div className="h-4 w-32 bg-gray-200 rounded" />
+                              </div>
+                            ) : (
+                              <>
+                                {form.date && (!availableSlots[form.date] || availableSlots[form.date].length === 0) ? (
+                                  <div className="space-y-4">
+                                    <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl">
+                                      <p className="text-xs font-bold text-amber-700">No technicians available on this date. Please pick another day or select from recommended times below:</p>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Available Dates</p>
+                                      <div className="flex flex-wrap gap-2">
+                                        {Object.keys(availableSlots).sort().slice(0, 5).map(date => (
+                                          <button
+                                            key={date}
+                                            onClick={() => set('date', date)}
+                                            className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-black text-[#001d4a] hover:border-red-500 hover:text-red-500 transition-all"
+                                          >
+                                            {date}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {(availableSlots[form.date] || []).map((slot) => (
+                                      <button
+                                        key={`${slot.id}-${slot.time}`}
+                                        onClick={() => set('time', slot.time)}
+                                        className={`
+                                          py-4 px-6 rounded-2xl border-2 font-black text-sm transition-all text-left flex items-center justify-between group
+                                          ${form.time === slot.time ? 'border-red-500 bg-red-50/50 text-[#001d4a]' : 'border-gray-100 text-gray-400 hover:border-blue-200'}
+                                        `}
+                                      >
+                                        <span>🕐 {slot.time}</span>
+                                        {form.time === slot.time && <span className="w-2 h-2 rounded-full bg-red-500" />}
+                                      </button>
+                                    ))}
+                                    {form.date && availableSlots[form.date]?.length === 0 && (
+                                      <p className="col-span-2 text-xs text-gray-400 font-bold italic">Checking alternate availability...</p>
+                                    )}
+                                  </div>
+                                )}
+                              </>
+                            )}
                           </div>
 
                           {/* Final Summary Card */}

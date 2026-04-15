@@ -41,7 +41,7 @@ const TIME_WINDOWS = [
   '6:00 PM – 8:00 PM',
 ];
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
 /* ─── Main Component ─────────────────────────────────────── */
 export default function ChatBot() {
@@ -63,6 +63,9 @@ export default function ChatBot() {
     date: '',
     time: '',
   });
+
+  const [availableSlots, setAvailableSlots] = useState<Record<string, {id: string, time: string}[]>>({});
+  const [loadingSlots, setLoadingSlots] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -157,8 +160,16 @@ export default function ChatBot() {
       updated.date = val;
       nextStep = 'time';
     } else if (intakeStep === 'time') {
-      updated.time = val;
-      nextStep = 'review';
+      // Logic for alternative date selection while in 'time' step
+      // A date string looks like YYYY-MM-DD (e.g. 2026-04-20)
+      if (val.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        updated.date = val;
+        updated.time = '';
+        nextStep = 'time';
+      } else {
+        updated.time = val;
+        nextStep = 'review';
+      }
     }
 
     setFormData(updated);
@@ -178,6 +189,28 @@ export default function ChatBot() {
     }, 800);
   };
 
+  /* ── Dynamic Slots Fetching ── */
+  const fetchAvailableSlots = async (service: string) => {
+    setLoadingSlots(true);
+    try {
+      const res = await fetch(`${API}/api/public/available-slots?service=${encodeURIComponent(service)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableSlots(data);
+      }
+    } catch (err) {
+      console.error("ChatBot slot fetch error:", err);
+    } finally {
+      setLoadingSlots(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedCategories.length > 0) {
+      fetchAvailableSlots(selectedCategories.join(', '));
+    }
+  }, [selectedCategories]);
+
   /* ── Final Submission ── */
   const [submissionError, setSubmissionError] = useState('');
 
@@ -185,12 +218,17 @@ export default function ChatBot() {
     setSubmitting(true);
     setSubmissionError('');
     try {
+      // Find matching slot ID
+      const daySlots = availableSlots[formData.date] || [];
+      const selectedSlot = daySlots.find(s => s.time === formData.time);
+
       const res = await fetch(`${API}/api/schedule`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           service: selectedCategories.join(', '),
-          ...formData
+          ...formData,
+          slot_id: selectedSlot?.id
         }),
       });
       
@@ -482,21 +520,38 @@ export default function ChatBot() {
 
                 {!typing && intakeStep === 'time' && (
                   <div style={{ paddingLeft: '36px', display: 'grid', gridTemplateColumns: '1fr', gap: '6px' }}>
-                    {TIME_WINDOWS.map((t) => (
-                      <button
-                        key={t}
-                        onClick={() => handleUserInput(t)}
-                        style={{
-                          padding: '8px 12px', borderRadius: '10px', border: '2px solid #e5e7eb',
-                          fontSize: '12px', fontWeight: 700, color: '#4b5563', background: '#fff',
-                          textAlign: 'left', cursor: 'pointer', transition: 'all 0.2s'
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#003580')}
-                        onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#e5e7eb')}
-                      >
-                        🕐 {t}
-                      </button>
-                    ))}
+                    {loadingSlots ? (
+                      <div style={{ padding: '10px', color: '#6b7280', fontSize: '12px' }}>Checking technician calendars...</div>
+                    ) : (
+                      <>
+                        {(availableSlots[formData.date] || []).length === 0 ? (
+                           <div style={{ padding: '10px', background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '10px', color: '#b91c1c', fontSize: '11px', fontWeight: 600 }}>
+                              Sorry, no technicians are available on this date. Please pick another date.
+                              <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                {Object.keys(availableSlots).sort().slice(0, 3).map(d => (
+                                  <button key={d} onClick={() => handleUserInput(d)} style={{ background: '#fff', border: '1px solid #e5e7eb', padding: '4px 8px', borderRadius: '6px', fontSize: '10px' }}>{d}</button>
+                                ))}
+                              </div>
+                           </div>
+                        ) : (
+                          (availableSlots[formData.date] || []).map((slot) => (
+                            <button
+                              key={`${slot.id}-${slot.time}`}
+                              onClick={() => handleUserInput(slot.time)}
+                              style={{
+                                padding: '8px 12px', borderRadius: '10px', border: '2px solid #e5e7eb',
+                                fontSize: '12px', fontWeight: 700, color: '#4b5563', background: '#fff',
+                                textAlign: 'left', cursor: 'pointer', transition: 'all 0.2s'
+                              }}
+                              onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#003580')}
+                              onMouseLeave={(e) => (e.currentTarget.style.borderColor = '#e5e7eb')}
+                            >
+                              🕐 {slot.time}
+                            </button>
+                          ))
+                        )}
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -578,11 +633,13 @@ export default function ChatBot() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKey}
-                placeholder="Type your answer..."
+                readOnly={intakeStep === 'date' || intakeStep === 'time'}
+                placeholder={intakeStep === 'date' || intakeStep === 'time' ? "Please select an option above..." : "Type your answer..."}
                 style={{
                   flex: 1, border: '1.5px solid #e5e7eb', borderRadius: '24px',
                   padding: '9px 16px', fontSize: '13px', fontWeight: 500,
-                  outline: 'none', background: '#f9fafb', color: '#1f2937',
+                  outline: 'none', background: (intakeStep === 'date' || intakeStep === 'time') ? '#f3f4f6' : '#f9fafb', 
+                  color: '#1f2937', cursor: (intakeStep === 'date' || intakeStep === 'time') ? 'not-allowed' : 'text',
                   transition: 'border-color 0.2s',
                 }}
                 onFocus={(e) => (e.target.style.borderColor = '#003580')}
