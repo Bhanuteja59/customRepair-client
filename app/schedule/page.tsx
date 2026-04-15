@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
 
 const SERVICES = [
   { id: 'hvac', label: 'HVAC / AC Repair', icon: '❄️', desc: 'Cooling, heating, tune-ups' },
@@ -13,16 +15,33 @@ const SERVICES = [
   { id: 'other', label: 'Other / Not Sure', icon: '🔧', desc: 'Tell us what you need' },
 ];
 
-const TIME_WINDOWS = [
-  '8:00 AM – 10:00 AM',
-  '10:00 AM – 12:00 PM',
-  '12:00 PM – 2:00 PM',
-  '2:00 PM – 4:00 PM',
-  '4:00 PM – 6:00 PM',
-  '6:00 PM – 8:00 PM',
-];
-
 type Step = 1 | 2 | 3;
+
+interface AvailableSlot {
+  id: string;
+  slot_date: string;
+  start_time: string;
+  end_time: string;
+  display: string;
+}
+
+interface SkillGroup {
+  skill: string;
+  slots: AvailableSlot[];
+  available: boolean;
+}
+
+type SlotResponseType = 'single_worker' | 'split_required' | 'unavailable';
+
+interface SlotResponse {
+  type: SlotResponseType;
+  slots?: AvailableSlot[];
+  required_skills?: string[];
+  skill_groups?: SkillGroup[];
+  all_skills_covered?: boolean;
+  missing_skills?: string[];
+  message?: string;
+}
 
 export default function SchedulePage() {
   const [step, setStep] = useState<Step>(1);
@@ -32,6 +51,11 @@ export default function SchedulePage() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
   const [bookingRef, setBookingRef] = useState('');
+
+  // Slot state
+  const [slotResponse, setSlotResponse] = useState<SlotResponse | null>(null);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [selectedSlotId, setSelectedSlotId] = useState('');
 
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -43,6 +67,26 @@ export default function SchedulePage() {
 
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // Fetch available worker slots whenever date or services change (in step 3)
+  const fetchSlots = useCallback(async (date: string, services: string[]) => {
+    if (!date || services.length === 0) return;
+    setSlotsLoading(true);
+    setSlotResponse(null);
+    setSelectedSlotId('');
+    try {
+      const serviceParam = encodeURIComponent(services.join(', '));
+      const res = await fetch(`${API}/api/slots/available?service=${serviceParam}&date=${date}`);
+      if (res.ok) {
+        const data: SlotResponse = await res.json();
+        setSlotResponse(data);
+      }
+    } catch {
+      // silently fail — user will see empty state
+    } finally {
+      setSlotsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     // 1. Check for resume
@@ -97,15 +141,16 @@ export default function SchedulePage() {
     const token = localStorage.getItem('customer_token');
     
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/schedule`, {
+      const res = await fetch(`${API}/api/schedule`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': token ? `Bearer ${token}` : ''
         },
         body: JSON.stringify({
           service: services.join(', '),
-          ...formData
+          ...formData,
+          slot_id: selectedSlotId || undefined,
         }),
       });
       if (!res.ok) {
@@ -125,8 +170,16 @@ export default function SchedulePage() {
     }
   };
 
+  // Fetch slots when date changes while on step 3
+  useEffect(() => {
+    if (step === 3 && form.date && selectedServices.length > 0) {
+      fetchSlots(form.date, selectedServices);
+    }
+  }, [step, form.date, selectedServices, fetchSlots]);
+
+  const availableSlots: AvailableSlot[] = slotResponse?.type === 'single_worker' ? (slotResponse.slots ?? []) : [];
   const canProceedStep2 = form.name && form.phone && form.email;
-  const canProceedStep3 = form.date && form.time;
+  const canProceedStep3 = form.date && selectedSlotId && slotResponse?.type === 'single_worker';
 
   return (
     <div className="min-h-screen bg-[#f8fafc]">
@@ -344,50 +397,137 @@ export default function SchedulePage() {
                     </div>
                   )}
 
-                  {/* Step 3: Timing */}
+                  {/* Step 3: Pick a Worker Slot */}
                   {step === 3 && (
                     <div className="space-y-8">
                       <div>
-                        <h2 className="text-3xl font-[1000] italic tracking-tighter text-[#001d4a] mb-2">When do you need us?</h2>
-                        <p className="text-gray-400 font-bold">Technicians typically arrive within the 2-hour window.</p>
+                        <h2 className="text-3xl font-[1000] italic tracking-tighter text-[#001d4a] mb-2">Pick Your Arrival Slot</h2>
+                        <p className="text-gray-400 font-bold">Choose a date — we'll show you the real available windows from our technicians.</p>
                       </div>
 
                       <div className="space-y-8">
-                         <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Select Date *</label>
-                            <input
-                              type="date" value={form.date} min={new Date().toISOString().split('T')[0]}
-                              onChange={(e) => set('date', e.target.value)}
-                              className="w-full bg-gray-50 border-2 border-transparent rounded-2xl p-5 font-bold text-[#001d4a] outline-none focus:border-[#001d4a] focus:bg-white transition-all shadow-inner"
-                            />
-                          </div>
+                        {/* Date Picker */}
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Select Date *</label>
+                          <input
+                            type="date"
+                            value={form.date}
+                            min={new Date().toISOString().split('T')[0]}
+                            onChange={(e) => { set('date', e.target.value); setSelectedSlotId(''); }}
+                            className="w-full bg-gray-50 border-2 border-transparent rounded-2xl p-5 font-bold text-[#001d4a] outline-none focus:border-[#001d4a] focus:bg-white transition-all shadow-inner"
+                          />
+                        </div>
 
+                        {/* Available Slots */}
+                        {form.date && (
                           <div className="space-y-4">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Arrival Window *</label>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                              {TIME_WINDOWS.map((t) => (
-                                <button
-                                  key={t}
-                                  onClick={() => set('time', t)}
-                                  className={`
-                                    py-4 px-6 rounded-2xl border-2 font-black text-sm transition-all text-left flex items-center justify-between group
-                                    ${form.time === t ? 'border-red-500 bg-red-50/50 text-[#001d4a]' : 'border-gray-100 text-gray-400 hover:border-blue-200'}
-                                  `}
-                                >
-                                  <span>🕐 {t}</span>
-                                  {form.time === t && <span className="w-2 h-2 rounded-full bg-red-500" />}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
+                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">
+                              Available Windows *
+                              {slotsLoading && <span className="ml-2 text-blue-400 normal-case">Checking availability...</span>}
+                            </label>
 
-                          {/* Final Summary Card */}
-                          {canProceedStep3 && (
+                            {/* Loading skeleton */}
+                            {slotsLoading && (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-pulse">
+                                {[1,2,3,4].map(n => (
+                                  <div key={n} className="h-14 rounded-2xl bg-gray-100" />
+                                ))}
+                              </div>
+                            )}
+
+                            {/* ── CASE 1: Single worker can do everything ── */}
+                            {!slotsLoading && slotResponse?.type === 'single_worker' && availableSlots.length > 0 && (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {availableSlots.map((slot) => {
+                                  const isSelected = selectedSlotId === slot.id;
+                                  return (
+                                    <button
+                                      key={slot.id}
+                                      onClick={() => setSelectedSlotId(slot.id)}
+                                      className={`
+                                        py-4 px-6 rounded-2xl border-2 font-black text-sm transition-all text-left flex items-center justify-between
+                                        ${isSelected ? 'border-red-500 bg-red-50/50 text-[#001d4a]' : 'border-gray-100 text-gray-400 hover:border-blue-200 hover:bg-blue-50/20'}
+                                      `}
+                                    >
+                                      <span>🕐 {slot.display}</span>
+                                      {isSelected && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* ── CASE 2: Split required — no single worker covers all skills ── */}
+                            {!slotsLoading && slotResponse?.type === 'split_required' && (
+                              <div className="space-y-4">
+                                {/* Notice banner */}
+                                <div className="rounded-2xl border-2 border-amber-200 bg-amber-50 p-5">
+                                  <div className="flex items-start gap-3">
+                                    <span className="text-2xl shrink-0">⚠️</span>
+                                    <div>
+                                      <p className="font-black text-amber-800 text-sm mb-1">No single technician available for all selected services</p>
+                                      <p className="text-amber-700 text-xs font-bold leading-relaxed">
+                                        We currently don't have one technician who can handle{' '}
+                                        <span className="text-amber-900">{selectedServices.join(' & ')}</span>{' '}
+                                        together on this date. Here's what's available individually:
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Per-skill slot groups */}
+                                {slotResponse.skill_groups?.map((group) => (
+                                  <div key={group.skill} className="rounded-2xl border-2 border-gray-100 p-5 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                      <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                                        {group.skill.toUpperCase()} Specialist
+                                      </p>
+                                      {group.available
+                                        ? <span className="text-[10px] font-black uppercase tracking-wider text-green-600 bg-green-50 px-3 py-1 rounded-full">Available</span>
+                                        : <span className="text-[10px] font-black uppercase tracking-wider text-red-500 bg-red-50 px-3 py-1 rounded-full">No Slots</span>
+                                      }
+                                    </div>
+                                    {group.available ? (
+                                      <div className="flex flex-wrap gap-2">
+                                        {group.slots.map((s) => (
+                                          <span key={s.id} className="text-xs font-bold bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-gray-500">
+                                            🕐 {s.display}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="text-xs text-gray-400 font-bold">No technicians free on this date for this service.</p>
+                                    )}
+                                  </div>
+                                ))}
+
+                                {/* Guidance */}
+                                <div className="rounded-2xl bg-blue-50 border border-blue-100 p-4 text-center">
+                                  <p className="text-xs font-black text-blue-700">
+                                    💡 Try a different date — or book each service separately to lock individual technicians.
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* ── CASE 3: Nothing available at all ── */}
+                            {!slotsLoading && (slotResponse?.type === 'unavailable' || (!slotResponse && !slotsLoading && form.date)) && (
+                              <div className="rounded-2xl border-2 border-dashed border-gray-200 py-10 text-center">
+                                <p className="text-2xl mb-3">📅</p>
+                                <p className="font-black text-gray-500 text-sm">No technician slots available on this date.</p>
+                                <p className="text-gray-400 text-xs font-bold mt-1">Our technicians update their schedules daily — try another date.</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Summary Card — only for confirmed single-worker booking */}
+                        {canProceedStep3 && (() => {
+                          const chosen = availableSlots.find((s: AvailableSlot) => s.id === selectedSlotId);
+                          return (
                             <div className="bg-[#001d4a] rounded-3xl p-8 text-white relative overflow-hidden animate-slideUp">
-                               {/* Background highlight */}
                               <div className="absolute top-0 right-0 w-32 h-32 bg-red-500 opacity-20 blur-3xl -mr-16 -mt-16" />
-                              
-                              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 mb-4">Summary of Service</p>
+                              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 mb-4">Booking Summary</p>
                               <div className="space-y-3">
                                 <div className="flex items-center gap-3">
                                   <span className="text-2xl">⚡</span>
@@ -395,7 +535,7 @@ export default function SchedulePage() {
                                 </div>
                                 <div className="flex items-center gap-3 text-white/60 font-bold text-sm">
                                   <span>📅</span>
-                                  <p>{form.date} at {form.time}</p>
+                                  <p>{form.date} · {chosen?.display}</p>
                                 </div>
                                 <div className="flex items-center gap-3 text-white/60 font-bold text-sm">
                                   <span>📍</span>
@@ -403,27 +543,28 @@ export default function SchedulePage() {
                                 </div>
                               </div>
                             </div>
-                          )}
+                          );
+                        })()}
 
-                          {error && (
-                            <p className="text-red-500 text-sm font-black text-center bg-red-50 py-3 rounded-xl border border-red-100">⚠️ {error}</p>
-                          )}
+                        {error && (
+                          <p className="text-red-500 text-sm font-black text-center bg-red-50 py-3 rounded-xl border border-red-100">⚠️ {error}</p>
+                        )}
 
-                          <div className="flex gap-4 pt-4">
-                            <button onClick={() => setStep(2)} className="flex-1 py-5 rounded-2xl font-black text-gray-400 border-2 border-gray-100 hover:border-gray-200 hover:text-gray-600 transition-all">
-                              ← Back
-                            </button>
-                            <button
-                              onClick={handleSubmit}
-                              disabled={!canProceedStep3 || submitting}
-                              className={`
-                                flex-[2] py-5 rounded-2xl font-black text-lg transition-all shadow-xl flex items-center justify-center gap-3
-                                ${canProceedStep3 && !submitting ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/20' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}
-                              `}
-                            >
-                              {submitting ? 'Connecting...' : 'Confirm Fast Booking ✓'}
-                            </button>
-                          </div>
+                        <div className="flex gap-4 pt-4">
+                          <button onClick={() => setStep(2)} className="flex-1 py-5 rounded-2xl font-black text-gray-400 border-2 border-gray-100 hover:border-gray-200 hover:text-gray-600 transition-all">
+                            ← Back
+                          </button>
+                          <button
+                            onClick={handleSubmit}
+                            disabled={!canProceedStep3 || submitting}
+                            className={`
+                              flex-[2] py-5 rounded-2xl font-black text-lg transition-all shadow-xl flex items-center justify-center gap-3
+                              ${canProceedStep3 && !submitting ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/20' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}
+                            `}
+                          >
+                            {submitting ? 'Locking your slot...' : 'Confirm Booking ✓'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
