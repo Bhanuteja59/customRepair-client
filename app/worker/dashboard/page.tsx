@@ -9,7 +9,7 @@ const WS  = process.env.NEXT_PUBLIC_WS_URL  ?? "ws://localhost:8000";
 const STATUS_THEMES: Record<string, { label: string; badge: string; icon: string }> = {
   pending:     { label: "Wait for Admin", badge: "bg-amber-50 text-amber-600 border-amber-100",  icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
   assigned:    { label: "New Job for You!",   badge: "bg-blue-50 text-blue-600 border-blue-100",     icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0z" },
-  accepted:    { label: "Ready to Start",        badge: "bg-emerald-50 text-emerald-600 border-emerald-100",  icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
+  claimed:     { label: "Ready to Start",        badge: "bg-emerald-50 text-emerald-600 border-emerald-100",  icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
   in_progress: { label: "Working Now",  badge: "bg-emerald-50 text-emerald-600 border-emerald-100",  icon: "M13 10V3L4 14h7v7l9-11h-7z" },
   completed:   { label: "Done!",        badge: "bg-gray-50 text-gray-500 border-gray-100",     icon: "M5 13l4 4L19 7" },
 };
@@ -207,12 +207,12 @@ export default function WorkerDashboard() {
 
                   <div className="md:w-56 flex flex-col justify-end gap-3 pt-6 md:pt-0 md:border-l md:pl-8 border-slate-100">
                      {activeTab === "market" && (
-                        <button onClick={() => updateStatus(a.id, 'accepted')} className="w-full py-5 bg-emerald-500 text-white font-[1000] text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-lg shadow-emerald-100 hover:bg-emerald-600 active:scale-95 transition-all">Claim Job ✓</button>
+                        <button onClick={() => updateStatus(a.id, 'claimed')} className="w-full py-5 bg-emerald-500 text-white font-[1000] text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-lg shadow-emerald-100 hover:bg-emerald-600 active:scale-95 transition-all">Claim Job ✓</button>
                      )}
                      {a.status === 'assigned' && (
-                        <button onClick={() => updateStatus(a.id, 'accepted')} className="w-full py-5 bg-emerald-500 text-white font-[1000] text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-lg shadow-emerald-100 hover:bg-emerald-600 active:scale-95 transition-all">Confirm Match ✓</button>
+                        <button onClick={() => updateStatus(a.id, 'claimed')} className="w-full py-5 bg-emerald-500 text-white font-[1000] text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-lg shadow-emerald-100 hover:bg-emerald-600 active:scale-95 transition-all">Confirm Match ✓</button>
                      )}
-                     {a.status === 'accepted' && (
+                     {a.status === 'claimed' && (
                         <button onClick={() => updateStatus(a.id, 'in_progress')} className="w-full py-5 bg-indigo-600 text-white font-[1000] text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all">Start Task ⚡</button>
                      )}
                      {a.status === 'in_progress' && (

@@ -12,8 +12,8 @@ const STATUS_META: Record<string, { label: string; color: string; bg: string; do
   open:        { label: 'Pending Review',   color: '#f59e0b', bg: '#fef3c7', dot: 'bg-amber-400' },
   pending:     { label: 'Pending Review',   color: '#f59e0b', bg: '#fef3c7', dot: 'bg-amber-400' },
   assigned:    { label: 'Worker Assigned',  color: '#3b82f6', bg: '#dbeafe', dot: 'bg-blue-500' },
-  claimed:     { label: 'Confirmed',        color: '#10b981', bg: '#d1fae5', dot: 'bg-emerald-500' },
-  accepted:    { label: 'Confirmed (Legacy)',color: '#10b981', bg: '#d1fae5', dot: 'bg-emerald-500' },
+  accepted:    { label: 'Confirmed',        color: '#10b981', bg: '#d1fae5', dot: 'bg-emerald-500' },
+  confirmed:   { label: 'Confirmed',        color: '#10b981', bg: '#d1fae5', dot: 'bg-emerald-500' },
   in_progress: { label: 'Work in Progress', color: '#8b5cf6', bg: '#ede9fe', dot: 'bg-violet-500' },
   completed:   { label: 'Completed',        color: '#6b7280', bg: '#f3f4f6', dot: 'bg-gray-400' },
 };
@@ -273,7 +273,7 @@ export default function CustomerDashboard() {
   }
 
   // Bucket bookings
-  const assigned   = bookings.filter(b => ['assigned', 'accepted'].includes(b.status));
+  const assigned   = bookings.filter(b => ['assigned', 'accepted', 'confirmed'].includes(b.status));
   const inProgress = bookings.filter(b => b.status === 'in_progress');
   const completed  = bookings.filter(b => b.status === 'completed');
   const pending    = bookings.filter(b => b.status === 'pending');
