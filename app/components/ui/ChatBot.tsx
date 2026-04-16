@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect } from 'react';
 
 /* ─── Types ─────────────────────────────────────────────── */
+
+/* ─── Types ─────────────────────────────────────────────── */
 type Phase = 'greeting' | 'categories' | 'intake' | 'submitted';
 
 type IntakeStep = 'notes' | 'name' | 'phone' | 'email' | 'address' | 'date' | 'time' | 'review';
