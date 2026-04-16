@@ -4,11 +4,12 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 const WS_URL  = process.env.NEXT_PUBLIC_WS_URL  || 'ws://localhost:8000';
 
 // Status → display metadata
 const STATUS_META: Record<string, { label: string; color: string; bg: string; dot: string }> = {
+  open:        { label: 'Pending Review',   color: '#f59e0b', bg: '#fef3c7', dot: 'bg-amber-400' },
   pending:     { label: 'Pending Review',   color: '#f59e0b', bg: '#fef3c7', dot: 'bg-amber-400' },
   assigned:    { label: 'Worker Assigned',  color: '#3b82f6', bg: '#dbeafe', dot: 'bg-blue-500' },
   accepted:    { label: 'Confirmed',        color: '#10b981', bg: '#d1fae5', dot: 'bg-emerald-500' },
