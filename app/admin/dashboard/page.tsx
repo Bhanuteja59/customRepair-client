@@ -3,14 +3,13 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { LucideIcon, ICONS } from "../../components/ui/Icons";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
 
 const STATUS_THEMES: Record<string, { label: string; badge: string; icon: string }> = {
   pending: { label: "Wait for Worker", badge: "bg-amber-50 text-amber-600 border-amber-100", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
   assigned: { label: "Worker Assigned", badge: "bg-blue-50 text-blue-600 border-blue-100", icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0z" },
-  confirmed: { label: "Confirmed", badge: "bg-emerald-50 text-emerald-600 border-emerald-100", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
-  claimed: { label: "Worker Claimed", badge: "bg-emerald-50 text-emerald-600 border-emerald-100", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
+  accepted: { label: "Confirmed", badge: "bg-emerald-50 text-emerald-600 border-emerald-100", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
   in_progress: { label: "Working Now", badge: "bg-violet-50 text-violet-600 border-violet-100", icon: "M13 10V3L4 14h7v7l9-11h-7z" },
   completed: { label: "Done", badge: "bg-gray-50 text-gray-500 border-gray-100", icon: "M5 13l4 4L19 7" },
   cancelled: { label: "Cancelled", badge: "bg-red-50 text-red-600 border-red-100", icon: "M6 18L18 6" },
@@ -219,7 +218,7 @@ export default function AdminDashboard() {
             <div className="p-6 bg-slate-50/50 border-b border-slate-100 flex items-center justify-between">
               <p className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Master Ledger</p>
               <div className="flex gap-2">
-                {["all", "pending", "assigned", "confirmed", "in_progress"].map(f => (
+                {["all", "pending", "assigned", "accepted", "in_progress"].map(f => (
                   <button key={f} onClick={() => setBookingFilter(f)} className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${bookingFilter === f ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white text-slate-400 border border-slate-100'}`}>
                     {f}
                   </button>
