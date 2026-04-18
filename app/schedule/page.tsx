@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -24,7 +24,7 @@ const TIME_WINDOWS = [
 
 type Step = 1 | 2 | 3;
 
-export default function SchedulePage() {
+function ScheduleContent() {
   const [step, setStep] = useState<Step>(1);
   const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [form, setForm] = useState({ name: '', phone: '', email: '', address: '', date: '', time: '', notes: '' });
@@ -516,5 +516,13 @@ export default function SchedulePage() {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function SchedulePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <ScheduleContent />
+    </Suspense>
   );
 }
