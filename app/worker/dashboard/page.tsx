@@ -4,7 +4,14 @@ import { useRouter } from "next/navigation";
 import { LucideIcon, ICONS } from "../../components/ui/Icons";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
-const WS  = process.env.NEXT_PUBLIC_WS_URL  ?? "ws://localhost:8000";
+const getWS = () => {
+  const url = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
+  if (typeof window !== "undefined" && window.location.protocol === "https:" && url.startsWith("ws:")) {
+    return url.replace("ws:", "wss:");
+  }
+  return url;
+};
+const WS = getWS();
 
 const STATUS_THEMES: Record<string, { label: string; badge: string; icon: string }> = {
   pending:     { label: "Wait for Admin", badge: "bg-amber-50 text-amber-600 border-amber-100",  icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },

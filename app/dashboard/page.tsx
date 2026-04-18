@@ -5,7 +5,14 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
-const WS_URL  = process.env.NEXT_PUBLIC_WS_URL  || 'ws://localhost:8000';
+const getWS = () => {
+  const url = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('ws:')) {
+    return url.replace('ws:', 'wss:');
+  }
+  return url;
+};
+const WS_URL = getWS();
 
 // Status → display metadata
 const STATUS_META: Record<string, { label: string; color: string; bg: string; dot: string }> = {
