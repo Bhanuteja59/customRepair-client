@@ -623,7 +623,7 @@ export default function ChatBot() {
           </div>
 
           {/* ── Chat Input (only in intake phase before review) ── */}
-          {phase === 'intake' && intakeStep !== 'review' && intakeStep !== 'date' && intakeStep !== 'time' && (
+          {phase === 'intake' && intakeStep !== 'review' && (
             <div
               style={{
                 padding: '10px 12px 14px', background: '#fff',
