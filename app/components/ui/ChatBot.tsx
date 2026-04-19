@@ -527,11 +527,24 @@ export default function ChatBot() {
                     ) : (
                       <>
                         {(availableSlots[formData.date] || []).length === 0 ? (
-                           <div style={{ padding: '10px', background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '10px', color: '#b91c1c', fontSize: '11px', fontWeight: 600 }}>
-                              Sorry, no technicians are available on this date. Please pick another date.
-                              <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                {Object.keys(availableSlots).sort().slice(0, 3).map(d => (
-                                  <button key={d} onClick={() => handleUserInput(d)} style={{ background: '#fff', border: '1px solid #e5e7eb', padding: '4px 8px', borderRadius: '6px', fontSize: '10px' }}>{d}</button>
+                           <div style={{ padding: '12px 14px', background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '16px', color: '#92400e', fontSize: '12px', fontWeight: 600, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                              <p style={{ margin: '0 0 8px 0', fontSize: '13px' }}>⚠️ No technicians available on this date.</p>
+                              <p style={{ margin: '0 0 10px 0', fontSize: '11px', color: '#b45309', fontWeight: 500 }}>Please select one of these recommended dates instead:</p>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                {Object.keys(availableSlots).sort().slice(0, 4).map(d => (
+                                  <button 
+                                    key={d} 
+                                    onClick={() => handleUserInput(d)} 
+                                    style={{ 
+                                      background: '#fff', border: '1px solid #fcd34d', padding: '6px 10px', 
+                                      borderRadius: '10px', fontSize: '11px', fontWeight: 800, color: '#92400e',
+                                      cursor: 'pointer', transition: 'all 0.2s'
+                                    }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.background = '#fffbeb')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}
+                                  >
+                                    {new Date(d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                                  </button>
                                 ))}
                               </div>
                            </div>

@@ -391,22 +391,35 @@ function ScheduleContent() {
                             ) : (
                               <>
                                 {form.date && (!availableSlots[form.date] || availableSlots[form.date].length === 0) ? (
-                                  <div className="space-y-4">
-                                    <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl">
-                                      <p className="text-xs font-bold text-amber-700">No technicians available on this date. Please pick another day or select from recommended times below:</p>
+                                  <div className="space-y-6 animate-fadeIn">
+                                    <div className="p-6 bg-amber-50 border border-amber-100 rounded-[24px] flex items-start gap-4">
+                                      <span className="text-2xl">📅</span>
+                                      <div>
+                                        <p className="text-sm font-black text-amber-900 mb-1">Date fully booked</p>
+                                        <p className="text-[11px] font-bold text-amber-700 leading-tight">
+                                          All our technicians are currently scheduled for this date. 
+                                          Please select one of the following available dates:
+                                        </p>
+                                      </div>
                                     </div>
-                                    <div className="space-y-2">
-                                      <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Available Dates</p>
+                                    
+                                    <div className="space-y-3">
+                                      <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Next Available Dates</p>
                                       <div className="flex flex-wrap gap-2">
                                         {Object.keys(availableSlots).sort().slice(0, 5).map(date => (
                                           <button
                                             key={date}
                                             onClick={() => set('date', date)}
-                                            className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-black text-[#001d4a] hover:border-red-500 hover:text-red-500 transition-all"
+                                            className="px-5 py-3 bg-white border-2 border-gray-100 rounded-2xl text-xs font-black text-[#001d4a] hover:border-[#e31b23] hover:text-[#e31b23] transition-all shadow-sm hover:shadow-md"
                                           >
-                                            {date}
+                                            {new Date(date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                                           </button>
                                         ))}
+                                        {Object.keys(availableSlots).length === 0 && (
+                                           <div className="w-full p-4 text-center border-2 border-dashed border-gray-200 rounded-2xl">
+                                              <p className="text-xs font-bold text-gray-400">No slots found for this service. Call us directly for manual scheduling.</p>
+                                           </div>
+                                        )}
                                       </div>
                                     </div>
                                   </div>
