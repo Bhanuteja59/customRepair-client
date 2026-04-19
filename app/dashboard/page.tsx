@@ -1,18 +1,10 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
-const getWS = () => {
-  const url = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('ws:')) {
-    return url.replace('ws:', 'wss:');
-  }
-  return url;
-};
-const WS_URL = getWS();
 
 // Status → display metadata
 const STATUS_META: Record<string, { label: string; color: string; bg: string; dot: string }> = {
@@ -166,7 +158,7 @@ function BookingCard({ job, compact = false }: { job: any; compact?: boolean }) 
                   </div>
                   <div>
                     <p className="font-black text-lg leading-tight">{a.worker.name}</p>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-400 mt-1 capitalize">{a.worker.specialization} Specialist</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-400 mt-1 capitalize">{(a.worker.specializations ?? []).join(', ')} Specialist</p>
                   </div>
                 </div>
                 <div className="relative z-10 space-y-3 text-sm">
@@ -213,7 +205,6 @@ export default function CustomerDashboard() {
   const [loading, setLoading]   = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('services');
   const [toast, setToast]       = useState<string | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
   const router = useRouter();
 
   const fetchDashboard = useCallback(async (t: string) => {
@@ -226,27 +217,11 @@ export default function CustomerDashboard() {
       setBookings(data.bookings ?? []);
       if (data.customer) setUser(data.customer);
     } catch {
-      /* swallow — we'll retry on WS push */
+      /* swallow — next poll will retry */
     } finally {
       setLoading(false);
     }
   }, []);
-
-  const connectWs = useCallback((t: string, uid: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
-    const ws = new WebSocket(`${WS_URL}/ws/customer/${uid}?token=${t}`);
-    wsRef.current = ws;
-    ws.onmessage = (e) => {
-      try {
-        const d = JSON.parse(e.data);
-        if (d.type === 'job_update') {
-          showToast(d.message || 'Your job status was updated.');
-          fetchDashboard(t);
-        }
-      } catch { /* ignore */ }
-    };
-    ws.onclose = () => setTimeout(() => connectWs(t, uid), 4000);
-  }, [fetchDashboard]);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -261,10 +236,9 @@ export default function CustomerDashboard() {
     const parsedUser = JSON.parse(u);
     setUser(parsedUser);
     fetchDashboard(t);
-    connectWs(t, parsedUser.id);
-    const interval = setInterval(() => fetchDashboard(t), 30000);
-    return () => { clearInterval(interval); wsRef.current?.close(); };
-  }, [router, fetchDashboard, connectWs]);
+    const interval = setInterval(() => fetchDashboard(t), 10000);
+    return () => clearInterval(interval);
+  }, [router, fetchDashboard]);
 
   const logout = () => { localStorage.clear(); router.push('/'); };
 
