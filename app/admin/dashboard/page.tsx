@@ -1,17 +1,9 @@
 "use client";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { LucideIcon, ICONS } from "../../components/ui/Icons";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-const getWS = () => {
-  const url = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
-  if (typeof window !== "undefined" && window.location.protocol === "https:" && url.startsWith("ws:")) {
-    return url.replace("ws:", "wss:");
-  }
-  return url;
-};
-const WS_URL = getWS();
 
 const STATUS_THEMES: Record<string, { label: string; badge: string; icon: string }> = {
   pending: { label: "Wait for Worker", badge: "bg-amber-50 text-amber-600 border-amber-100", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
@@ -50,7 +42,6 @@ export default function AdminDashboard() {
   const [token, setToken] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [wsStatus, setWsStatus] = useState("offline");
 
   const [bookings, setBookings] = useState<any[]>([]);
   const [workers, setWorkers] = useState<any[]>([]);
@@ -59,10 +50,8 @@ export default function AdminDashboard() {
   const [analytics, setAnalytics] = useState<any>(null);
 
   const [bookingFilter, setBookingFilter] = useState("all");
-  const [notification, setNotification] = useState<any>(null);
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     const savedToken = localStorage.getItem("admin_token");
@@ -96,43 +85,18 @@ export default function AdminDashboard() {
     }
   }, []);
 
-  const connectWs = useCallback(() => {
-    const savedToken = localStorage.getItem("admin_token");
-    if (!savedToken || (wsRef.current && wsRef.current.readyState === WebSocket.OPEN)) return;
-    setWsStatus("connecting");
-    const ws = new WebSocket(`${WS_URL}/ws/admin?token=${savedToken}`);
-    wsRef.current = ws;
-    ws.onopen = () => setWsStatus("online");
-    ws.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.type === "new_booking" || data.type === "new_lead" || data.type === "job_status_update" || data.type === "job_assigned") {
-           setNotification({ 
-             title: data.type.replace(/_/g, ' ').toUpperCase(), 
-             msg: data.message || "State change detected" 
-           });
-           fetchData();
-           setTimeout(() => setNotification(null), 8000);
-        }
-      } catch (err) { console.error("WS Error", err); }
-    };
-    ws.onclose = () => { setWsStatus("offline"); setTimeout(connectWs, 5000); };
-  }, [fetchData]);
-
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => { 
+  useEffect(() => {
     if (admin) {
-      fetchData(); 
-      const interval = setInterval(fetchData, 60000);
+      fetchData();
+      const interval = setInterval(fetchData, 10000);
       return () => clearInterval(interval);
     }
   }, [admin, fetchData]);
-
-  useEffect(() => { connectWs(); return () => wsRef.current?.close(); }, [connectWs]);
 
   const toggleStatus = async (type: string, id: string) => {
     const savedToken = localStorage.getItem("admin_token");
@@ -202,8 +166,8 @@ export default function AdminDashboard() {
           <div>
             <h2 className="text-3xl font-[1000] text-slate-900 tracking-tighter italic">{NAVIGATION.find(t => t.id === activeTab)?.label}</h2>
             <div className="flex items-center gap-2 mt-2">
-              <div className={`w-2 h-2 rounded-full ${wsStatus === 'online' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-300'}`} />
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{wsStatus} Real-Time Stream</span>
+              <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Auto-Refresh</span>
             </div>
           </div>
           <button onClick={fetchData} disabled={isRefreshing} className={`p-4 bg-white border border-slate-100 rounded-2xl text-slate-400 hover:text-indigo-600 shadow-sm transition-all hover:shadow-md ${isRefreshing ? 'animate-spin' : ''}`}><LucideIcon d={ICONS.REFRESH} className="w-5 h-5" /></button>
@@ -254,18 +218,6 @@ export default function AdminDashboard() {
           </div>
         )}
       </main>
-
-      {notification && (
-        <div className="fixed bottom-8 right-8 z-[120] animate-slideUp">
-          <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-2xl border border-white/10 flex items-center gap-4 min-w-[300px]">
-            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg"><LucideIcon d={ICONS.BOLT} className="w-5 h-5 text-white" /></div>
-            <div>
-              <p className="text-[10px] font-black uppercase text-indigo-400 tracking-widest mb-0.5">{notification.title}</p>
-              <p className="text-xs font-bold leading-tight">{notification.msg}</p>
-            </div>
-          </div>
-        </div>
-      )}
 
       <style jsx global>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }

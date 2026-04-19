@@ -1,24 +1,17 @@
 "use client";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { LucideIcon, ICONS } from "../../components/ui/Icons";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
-const getWS = () => {
-  const url = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
-  if (typeof window !== "undefined" && window.location.protocol === "https:" && url.startsWith("ws:")) {
-    return url.replace("ws:", "wss:");
-  }
-  return url;
-};
-const WS = getWS();
 
 const STATUS_THEMES: Record<string, { label: string; badge: string; icon: string }> = {
-  pending:     { label: "Wait for Admin", badge: "bg-amber-50 text-amber-600 border-amber-100",  icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
-  assigned:    { label: "New Job for You!",   badge: "bg-blue-50 text-blue-600 border-blue-100",     icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0z" },
-  accepted:    { label: "Ready to Start",        badge: "bg-emerald-50 text-emerald-600 border-emerald-100",  icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
-  in_progress: { label: "Working Now",  badge: "bg-emerald-50 text-emerald-600 border-emerald-100",  icon: "M13 10V3L4 14h7v7l9-11h-7z" },
-  completed:   { label: "Done!",        badge: "bg-gray-50 text-gray-500 border-gray-100",     icon: "M5 13l4 4L19 7" },
+  pending:       { label: "Wait for Admin",  badge: "bg-amber-50 text-amber-600 border-amber-100",    icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
+  assigned:      { label: "New Job for You!", badge: "bg-blue-50 text-blue-600 border-blue-100",      icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0z" },
+  claimed:       { label: "Ready to Start",  badge: "bg-emerald-50 text-emerald-600 border-emerald-100", icon: "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" },
+  in_progress:   { label: "Working Now",     badge: "bg-indigo-50 text-indigo-600 border-indigo-100",  icon: "M13 10V3L4 14h7v7l9-11h-7z" },
+  completed:     { label: "Done!",           badge: "bg-gray-50 text-gray-500 border-gray-100",       icon: "M5 13l4 4L19 7" },
+  not_completed: { label: "Unfinished",      badge: "bg-red-50 text-red-500 border-red-100",          icon: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 17c-.77 1.333.192 3 1.732 3z" },
 };
 
 export default function WorkerDashboard() {
@@ -27,11 +20,7 @@ export default function WorkerDashboard() {
   const [activeTab, setActiveTab] = useState("my_jobs");
   const [jobs, setJobs] = useState<any[]>([]);
   const [availableJobs, setAvailableJobs] = useState<any[]>([]);
-  const [wsStatus, setWsStatus] = useState("offline");
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [notification, setNotification] = useState<any>(null);
-  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     const t = localStorage.getItem("worker_token");
@@ -43,7 +32,6 @@ export default function WorkerDashboard() {
   const fetchData = useCallback(async () => {
     const token = localStorage.getItem("worker_token");
     if (!token) return;
-    setIsRefreshing(true);
     try {
       const [resMy, resAll] = await Promise.all([
         fetch(`${API}/api/workers/jobs`, { headers: { Authorization: `Bearer ${token}` } }),
@@ -55,54 +43,21 @@ export default function WorkerDashboard() {
       setAvailableJobs(Array.isArray(allData) ? allData : []);
     } catch (err) {
       console.error("Fetch error:", err);
-    } finally {
-      setIsRefreshing(false);
     }
   }, []);
-
-  const connectWs = useCallback(() => {
-    const token = localStorage.getItem("worker_token");
-    const wData = localStorage.getItem("worker_data");
-    if (!token || !wData || (wsRef.current && wsRef.current.readyState === WebSocket.OPEN)) return;
-    const workerId = JSON.parse(wData).id;
-    
-    setWsStatus("connecting");
-    const ws = new WebSocket(`${WS}/ws/worker/${workerId}?token=${token}`);
-    wsRef.current = ws;
-    ws.onopen = () => setWsStatus("online");
-    ws.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.type === "new_assignment" || data.type === "new_lead") {
-          setNotification({ 
-            title: "Real-time Node Update", 
-            msg: data.type === "new_assignment" ? "Direct Assignment Received" : "New Lead in Area",
-            id: data.assignment?.id || data.assignment_id
-          });
-          fetchData();
-        }
-      } catch (err) { console.error("WS Parse Error", err); }
-    };
-    ws.onclose = () => { setWsStatus("offline"); setTimeout(connectWs, 5000); };
-  }, [fetchData]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => { 
+  useEffect(() => {
     if (worker) {
-      fetchData(); 
-      const interval = setInterval(fetchData, 60000);
+      fetchData();
+      const interval = setInterval(fetchData, 10000);
       return () => clearInterval(interval);
     }
   }, [worker, fetchData]);
-
-  useEffect(() => {
-    if (worker) connectWs();
-    return () => wsRef.current?.close();
-  }, [worker, connectWs]);
 
   async function updateStatus(assignmentId: string, status: string, notes: string | null = null) {
     const token = localStorage.getItem("worker_token");
@@ -114,10 +69,7 @@ export default function WorkerDashboard() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ status, notes }),
       });
-      if (res.ok) {
-        fetchData();
-        setNotification(null);
-      }
+      if (res.ok) fetchData();
     } catch (err) { console.error("Update error:", err); }
   }
 
@@ -162,7 +114,7 @@ export default function WorkerDashboard() {
         <div className="mt-auto pt-6 border-t border-white/5">
           <div className="flex items-center gap-3 mb-6 px-1">
             <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center font-black text-white text-[10px]">{worker.name.charAt(0)}</div>
-            <div className="overflow-hidden leading-tight"><p className="text-[10px] font-black text-white truncate uppercase">{worker.name}</p><p className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">{worker.specialization}</p></div>
+            <div className="overflow-hidden leading-tight"><p className="text-[10px] font-black text-white truncate uppercase">{worker.name}</p><p className="text-[8px] font-bold text-slate-500 uppercase tracking-tighter">{worker.specializations?.[0]}</p></div>
           </div>
           <button onClick={() => { localStorage.clear(); router.replace("/worker/login"); }} className="w-full py-4 rounded-xl border border-white/5 text-slate-500 hover:text-red-400 hover:bg-red-500/5 transition-all text-[10px] font-black uppercase tracking-widest">Logout</button>
         </div>
@@ -173,8 +125,8 @@ export default function WorkerDashboard() {
           <div>
             <h2 className="text-3xl font-[1000] text-slate-900 tracking-tighter italic capitalize">{activeTab.replace('_', ' ')}</h2>
             <div className="flex items-center gap-2 mt-2">
-              <div className={`w-2 h-2 rounded-full ${wsStatus === 'online' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-slate-300'}`} />
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{wsStatus} Technical Node</span>
+              <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Auto-Refresh</span>
             </div>
           </div>
           <p className="text-sm font-black text-slate-900 tabular-nums bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm">{currentTime.toLocaleTimeString()}</p>
@@ -214,12 +166,12 @@ export default function WorkerDashboard() {
 
                   <div className="md:w-56 flex flex-col justify-end gap-3 pt-6 md:pt-0 md:border-l md:pl-8 border-slate-100">
                      {activeTab === "market" && (
-                        <button onClick={() => updateStatus(a.id, 'accepted')} className="w-full py-5 bg-emerald-500 text-white font-[1000] text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-lg shadow-emerald-100 hover:bg-emerald-600 active:scale-95 transition-all">Claim Job ✓</button>
+                        <button onClick={() => updateStatus(a.id, 'claimed')} className="w-full py-5 bg-emerald-500 text-white font-[1000] text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-lg shadow-emerald-100 hover:bg-emerald-600 active:scale-95 transition-all">Claim Job ✓</button>
                      )}
                      {a.status === 'assigned' && (
-                        <button onClick={() => updateStatus(a.id, 'accepted')} className="w-full py-5 bg-emerald-500 text-white font-[1000] text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-lg shadow-emerald-100 hover:bg-emerald-600 active:scale-95 transition-all">Confirm Match ✓</button>
+                        <button onClick={() => updateStatus(a.id, 'claimed')} className="w-full py-5 bg-emerald-500 text-white font-[1000] text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-lg shadow-emerald-100 hover:bg-emerald-600 active:scale-95 transition-all">Confirm Match ✓</button>
                      )}
-                     {a.status === 'accepted' && (
+                     {a.status === 'claimed' && (
                         <button onClick={() => updateStatus(a.id, 'in_progress')} className="w-full py-5 bg-indigo-600 text-white font-[1000] text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all">Start Task ⚡</button>
                      )}
                      {a.status === 'in_progress' && (
