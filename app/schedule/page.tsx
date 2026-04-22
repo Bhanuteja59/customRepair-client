@@ -77,19 +77,26 @@ function ScheduleContent() {
     }
   }, [searchParams]);
 
-  const fetchAvailableSlots = async (service: string) => {
-    setLoadingSlots(true);
+  const fetchAvailableSlots = async (service: string, silent = false) => {
+    if (!silent) setLoadingSlots(true);
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
       const res = await fetch(`${apiBase}/api/public/available-slots?service=${encodeURIComponent(service)}`);
       if (res.ok) {
         const data = await res.json();
         setAvailableSlots(data);
+        // Clear selected time if its slot was just removed
+        setForm(f => {
+          if (f.time && f.date && !data[f.date]?.some((s: {time: string}) => s.time === f.time)) {
+            return { ...f, time: '' };
+          }
+          return f;
+        });
       }
     } catch (err) {
       console.error("Failed to fetch slots:", err);
     } finally {
-      setLoadingSlots(false);
+      if (!silent) setLoadingSlots(false);
     }
   };
 
@@ -98,6 +105,15 @@ function ScheduleContent() {
       fetchAvailableSlots(selectedServices.join(', '));
     }
   }, [selectedServices]);
+
+  // Real-time polling: refresh slots every 30s while on step 3
+  useEffect(() => {
+    if (step !== 3 || selectedServices.length === 0) return;
+    const interval = setInterval(() => {
+      fetchAvailableSlots(selectedServices.join(', '), true);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [step, selectedServices]);
 
   const handleSubmit = async () => {
     // Find the slot object to get the ID
@@ -365,11 +381,43 @@ function ScheduleContent() {
                   {/* Step 3: Timing */}
                   {step === 3 && (
                     <div className="space-y-8">
-                      <div>
-                        <h2 className="text-3xl font-[1000] italic tracking-tighter text-[#001d4a] mb-2">When do you need us?</h2>
-                        <p className="text-gray-400 font-bold">Technicians typically arrive within the 2-hour window.</p>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <h2 className="text-3xl font-[1000] italic tracking-tighter text-[#001d4a] mb-2">When do you need us?</h2>
+                          <p className="text-gray-400 font-bold">Technicians typically arrive within the 2-hour window.</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0 mt-1 px-3 py-1.5 bg-green-50 border border-green-100 rounded-full">
+                          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                          <span className="text-[10px] font-black uppercase tracking-widest text-green-600">Live</span>
+                        </div>
                       </div>
 
+                      {/* No workers available at all */}
+                      {!loadingSlots && Object.keys(availableSlots).length === 0 ? (
+                        <div className="p-8 bg-gray-50 border-2 border-dashed border-gray-200 rounded-[28px] text-center space-y-4">
+                          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto">
+                            <span className="text-3xl">🔧</span>
+                          </div>
+                          <div>
+                            <p className="text-lg font-black text-[#001d4a] mb-2">No Free Workers Available</p>
+                            <p className="text-sm font-bold text-gray-400 leading-relaxed max-w-sm mx-auto">
+                              All our technicians are currently fully booked or off-shift for <span className="text-[#001d4a]">{selectedServices.join(' & ')}</span>.
+                              Our team will check back shortly — or call us to be added to the waitlist.
+                            </p>
+                          </div>
+                          <div className="flex items-center justify-center gap-3">
+                            <a href="tel:+15551234567" className="inline-flex items-center gap-2 px-5 py-3 bg-[#001d4a] text-white rounded-2xl font-black text-sm hover:bg-[#002b6b] transition-all">
+                              📞 Call Now
+                            </a>
+                            <button
+                              onClick={() => fetchAvailableSlots(selectedServices.join(', '))}
+                              className="inline-flex items-center gap-2 px-5 py-3 border-2 border-gray-200 rounded-2xl font-black text-sm text-gray-500 hover:border-[#001d4a] hover:text-[#001d4a] transition-all"
+                            >
+                              ↻ Refresh
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
                       <div className="space-y-8">
                          <div className="space-y-2">
                             <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Select Date *</label>
@@ -382,7 +430,7 @@ function ScheduleContent() {
 
                           <div className="space-y-4">
                             <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Arrival Window *</label>
-                            
+
                             {loadingSlots ? (
                               <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-2xl animate-pulse">
                                 <div className="w-5 h-5 rounded-full bg-gray-200" />
@@ -395,14 +443,14 @@ function ScheduleContent() {
                                     <div className="p-6 bg-amber-50 border border-amber-100 rounded-[24px] flex items-start gap-4">
                                       <span className="text-2xl">📅</span>
                                       <div>
-                                        <p className="text-sm font-black text-amber-900 mb-1">Date fully booked</p>
+                                        <p className="text-sm font-black text-amber-900 mb-1">No technicians available on this date</p>
                                         <p className="text-[11px] font-bold text-amber-700 leading-tight">
-                                          All our technicians are currently scheduled for this date. 
-                                          Please select one of the following available dates:
+                                          Workers have no open slots for the selected date.
+                                          Choose from the next available days below:
                                         </p>
                                       </div>
                                     </div>
-                                    
+
                                     <div className="space-y-3">
                                       <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Next Available Dates</p>
                                       <div className="flex flex-wrap gap-2">
@@ -412,15 +460,26 @@ function ScheduleContent() {
                                             onClick={() => set('date', date)}
                                             className="px-5 py-3 bg-white border-2 border-gray-100 rounded-2xl text-xs font-black text-[#001d4a] hover:border-[#e31b23] hover:text-[#e31b23] transition-all shadow-sm hover:shadow-md"
                                           >
-                                            {new Date(date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                                            {new Date(date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                                           </button>
                                         ))}
-                                        {Object.keys(availableSlots).length === 0 && (
-                                           <div className="w-full p-4 text-center border-2 border-dashed border-gray-200 rounded-2xl">
-                                              <p className="text-xs font-bold text-gray-400">No slots found for this service. Call us directly for manual scheduling.</p>
-                                           </div>
-                                        )}
                                       </div>
+                                    </div>
+                                  </div>
+                                ) : !form.date ? (
+                                  <div className="space-y-3">
+                                    <p className="text-[11px] font-bold text-gray-400">Select a date above. Available worker slots:</p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {Object.keys(availableSlots).sort().slice(0, 5).map(date => (
+                                        <button
+                                          key={date}
+                                          onClick={() => set('date', date)}
+                                          className="px-5 py-3 bg-white border-2 border-gray-100 rounded-2xl text-xs font-black text-[#001d4a] hover:border-[#e31b23] hover:text-[#e31b23] transition-all shadow-sm hover:shadow-md"
+                                        >
+                                          {new Date(date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                                          <span className="ml-1.5 text-[9px] text-gray-400">{availableSlots[date].length} slot{availableSlots[date].length !== 1 ? 's' : ''}</span>
+                                        </button>
+                                      ))}
                                     </div>
                                   </div>
                                 ) : (
@@ -438,9 +497,6 @@ function ScheduleContent() {
                                         {form.time === slot.time && <span className="w-2 h-2 rounded-full bg-red-500" />}
                                       </button>
                                     ))}
-                                    {form.date && availableSlots[form.date]?.length === 0 && (
-                                      <p className="col-span-2 text-xs text-gray-400 font-bold italic">Checking alternate availability...</p>
-                                    )}
                                   </div>
                                 )}
                               </>
@@ -491,6 +547,16 @@ function ScheduleContent() {
                             </button>
                           </div>
                       </div>
+                      )}
+
+                      {/* Back button always visible even when no slots */}
+                      {Object.keys(availableSlots).length === 0 && !loadingSlots && (
+                        <div className="flex gap-4 pt-2">
+                          <button onClick={() => setStep(2)} className="flex-1 py-5 rounded-2xl font-black text-gray-400 border-2 border-gray-100 hover:border-gray-200 hover:text-gray-600 transition-all">
+                            ← Back
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
